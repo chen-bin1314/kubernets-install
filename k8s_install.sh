@@ -1,4 +1,3 @@
-#version2
 #!/bin/bash
 
 
@@ -13,8 +12,8 @@ NIP=0
 SSH_P='22'
 DATADIR='/data'
 DOCKER_IP='172.62.0.1/26'
-SVC_IP='172.31.0.0/18'
-POD_IP='10.154.0.0/20'
+SVC_IP='172.61.0.0/16'
+POD_IP='172.63.0.0/16'
 
 
 
@@ -543,6 +542,7 @@ RestartSec=10
  
 WantedBy=multi-user.target
 EOF
+
 chmod 777 kubelet.service
 
 
@@ -556,6 +556,8 @@ ssh -p $SSH_P $i  "rpm -iv /root/k8s/kubeadm-1.22.3-0.x86_64.rpm --force --nodep
 ssh -p $SSH_P $i  "rpm -iv /root/k8s/kubelet-1.22.3-0.x86_64.rpm --force --nodeps"
 ssh -p $SSH_P $i  "rpm -iv /root/k8s/kubernetes-cni-0.8.7-0.x86_64.rpm --force --nodeps"
 ssh -p $SSH_P $i  "systemctl enable --now kubelet"
+ssh -p $SSH_P $i "cp /etc/sysconfig/kubelet{,-bak}"
+ssh -p $SSH_P $i  "echo 'KUBELET_EXTRA_ARGS=--container-runtime=remote --container-runtime-endpoint=/run/containerd/containerd.sock --cgroup-driver=systemd' > /etc/sysconfig/kubelet"
 done
 
 
@@ -614,7 +616,7 @@ localAPIEndpoint:
   advertiseAddress: $IP1               #k8s-master001 ip地址
   bindPort: 6443
 nodeRegistration:
-  criSocket: unix:///var/run/containerd/containerd.sock
+  criSocket: unix:///var/run/containerd/containerd.sock ## 使用 containerd的Unix socket 地址
   imagePullPolicy: IfNotPresent
   name: $IP1
   taints: null
@@ -658,7 +660,7 @@ authorization:
     cacheAuthorizedTTL: 0s
     cacheUnauthorizedTTL: 0s
 clusterDNS:
-- `echo ${POD_IP/0.0/0.10} |awk -F '/' '{print $1}'`
+- `echo ${SVC_IP/0.0/0.10} |awk -F '/' '{print $1}'`
 clusterDomain: cluster.local
 cpuManagerReconcilePeriod: 0s
 evictionPressureTransitionPeriod: 0s
@@ -718,7 +720,7 @@ systemctl restart kubelet
 #部署calico
 #echo "====calico========="
 # curl https://docs.projectcalico.org/manifests/calico.yaml -O
-sed -i 's#172.16.0.0/16#${POD_IP}#g' /root/kubernetes/calico.yaml 
+sed -i 's#192.168.0.0/16#${POD_IP}#g' /root/kubernetes/calico.yaml 
 kubectl apply -f /root/kubernetes/calico.yaml
 
 
@@ -728,3 +730,4 @@ for i in $IPS;do
   ssh -p $SSH_P $i "rm -rf /root/{cri-containerd-cni-1.5.10-linux-amd64.tar.gz,k8s-1.22.3-images.tar,k8s,rpm}"
   echo "kubernetes init  done, exit: ctrl + c "
 done
+
